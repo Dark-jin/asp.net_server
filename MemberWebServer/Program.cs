@@ -1,8 +1,11 @@
 
 using MemberWebServer.Model;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Reflection;
+using System.Text;
 
 namespace MemberWebServer
 {
@@ -12,11 +15,31 @@ namespace MemberWebServer
 		{
 			var builder = WebApplication.CreateBuilder(args);
 
+			var configuration = new ConfigurationBuilder()
+				.SetBasePath(builder.Environment.ContentRootPath)
+				.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+				.Build();
+
 			builder.Services.AddControllers();
 			builder.Services.AddDbContext<LoginContext>(opt =>
 				opt.UseInMemoryDatabase("MemberList"));
 			builder.Services.AddDbContext<RegistrationContext>(opt =>
 				opt.UseInMemoryDatabase("RegistrationList"));
+
+			builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+				.AddJwtBearer(options =>
+				{
+					options.TokenValidationParameters = new TokenValidationParameters
+					{
+						ValidateIssuer = true,
+						ValidateAudience = true,
+						ValidateLifetime = true,
+						ValidateIssuerSigningKey = true,
+						ValidIssuer = configuration["JwtSettings:Issuer"],
+						ValidAudience = configuration["JwtSettings:Audience"],
+						IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["JwtSettings:SecretKey"]))
+					};
+				});
 
 			// Add services to the container.
 

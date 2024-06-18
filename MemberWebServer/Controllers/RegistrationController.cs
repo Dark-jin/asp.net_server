@@ -24,7 +24,7 @@ namespace MemberWebServer.Controllers
             {
                 return BadRequest(ModelState);
             }
-            var existingRegistration = await _context.Registrations.FirstOrDefaultAsync(r => r.Email == registration.Email);
+            var existingRegistration = await _context.Registrations.FirstOrDefaultAsync(r => r.email == registration.email);
             if (existingRegistration != null)
             {
                 return BadRequest("등록된 정보가 있습니다.");
@@ -32,7 +32,7 @@ namespace MemberWebServer.Controllers
             _context.Registrations.Add(registration);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction(nameof(PostRegistration), new { email = registration.Email }, registration);
+            return CreatedAtAction(nameof(PostRegistration), new { email = registration.email }, registration);
         }
 	}
 }
