@@ -16,7 +16,7 @@ namespace MemberWebServer
 			builder.Services.AddDbContext<LoginContext>(opt =>
 				opt.UseInMemoryDatabase("MemberList"));
 			builder.Services.AddDbContext<RegistrationContext>(opt =>
-				opt.UseInMemoryDatabase("RegisrationList"));
+				opt.UseInMemoryDatabase("RegistrationList"));
 
 			// Add services to the container.
 
