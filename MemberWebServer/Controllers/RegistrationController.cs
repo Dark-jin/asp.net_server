@@ -16,6 +16,11 @@ namespace MemberWebServer.Controllers
             _context = context;
         }
         // POST api/<RegistrationController>
+        /// <summary>
+        /// 회원가입
+        /// </summary>
+        /// <param name="registration"></param>
+        /// <returns></returns>
         [HttpPost]
         [Consumes("application/json")]
         public async Task<ActionResult<Registration>> PostRegistration(Registration registration)

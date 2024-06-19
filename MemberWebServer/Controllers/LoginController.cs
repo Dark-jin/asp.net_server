@@ -23,7 +23,7 @@ namespace MemberWebServer.Controllers
 		private readonly LoginContext _context;
 		private readonly RegistrationContext _registrationContext;
         private readonly IConfiguration _configuration;
-        public static Dictionary<string, string> RefreshTokens = new Dictionary<string, string>();
+        public static List<string> RefreshTokens = new List<string>();
 
         public LoginController(LoginContext context, RegistrationContext registrationContext, IConfiguration configuration)
 		{
@@ -32,17 +32,22 @@ namespace MemberWebServer.Controllers
 			_configuration = configuration;
 		}
 		// GET: api/<LoginController>
-		[HttpGet("{id}")]
-		public async Task<ActionResult<LoginDB>> PostLogin(long id)
+        /// <summary>
+        /// Email로 멤버 프로필 조회
+        /// </summary>
+        /// <param name="email"></param>
+        /// <returns></returns>
+		[HttpGet("{email}")]
+		public async Task<ActionResult<Registration>> PostLogin(string email)
 		{
-			var loginDB = await _context.LoginDBs.FindAsync(id);
+			var registrationDB = await _registrationContext.Registrations.FindAsync(email);
 
-			if (loginDB == null)
+			if (registrationDB == null)
 			{
 				return NotFound();
 			}
 
-			return loginDB;
+			return registrationDB;
 		}
 		// POST api/<LoginController>
 		/// <remarks>
@@ -65,6 +70,7 @@ namespace MemberWebServer.Controllers
             if (match.Success)
 			{
                 var validationcheck =  await _registrationContext.Registrations.AnyAsync(user => user.email == loginDB.email && user.password == loginDB.password);
+                var registrationDB = await _registrationContext.Registrations.FindAsync(loginDB.email);
                 if (validationcheck == false)
 				{
                     return BadRequest("등록된 사용자가 없습니다.");
@@ -72,11 +78,11 @@ namespace MemberWebServer.Controllers
                 }
 				else
 				{
-                    var token = GenerateAccessToken(loginDB.email);
+                    var token = GenerateAccessToken(loginDB.email, registrationDB.firstName + registrationDB.lastName, registrationDB.userAvatar);
                     // Generate refresh token
                     var refreshToken = Guid.NewGuid().ToString();
                     // Store the refresh token (in-memory for simplicity)
-                    RefreshTokens[refreshToken] = loginDB.email;
+                    RefreshTokens.Add(refreshToken);
 
                     _context.LoginDBs.Add(loginDB);
                     await _context.SaveChangesAsync();
@@ -98,11 +104,12 @@ namespace MemberWebServer.Controllers
         // refreshtoken to accesstoken reprovide
         [HttpPost("refresh")]
         public IActionResult Refresh([FromBody] RefreshRequest request)
-        {
-            if (RefreshTokens.TryGetValue(request.RefreshToken, out var userEmail))
+        {  
+            if (RefreshTokens.Contains(request.RefreshToken))
             {
+                var user = _registrationContext.Registrations.FirstOrDefault(r => r.email == request.Email);
                 // Generate a new access token
-                var token = GenerateAccessToken(userEmail);
+                var token = GenerateAccessToken(user.email, user.firstName+user.lastName, user.userAvatar);
 
                 // Return the new access token to the client
                 return Ok(new { AccessToken = new JwtSecurityTokenHandler().WriteToken(token) });
@@ -110,13 +117,14 @@ namespace MemberWebServer.Controllers
 
             return BadRequest("Invalid refresh token");
         }
-        private JwtSecurityToken GenerateAccessToken(string userEmail)
+        private JwtSecurityToken GenerateAccessToken(string userEmail, string userName, string userAvatar)
         {
-            // Create user claims
+            // create user claim
             var claims = new List<Claim>
         {
-            new Claim(ClaimTypes.Email, userEmail),
-            // Add additional claims as needed (e.g., roles, etc.)
+            new Claim("email", userEmail),
+            new Claim("name", userName),
+            new Claim("userAvatar", userAvatar)
         };
 
             // Create a JWT
@@ -124,12 +132,17 @@ namespace MemberWebServer.Controllers
                 issuer: _configuration["JwtSettings:Issuer"],
                 audience: _configuration["JwtSettings:Audience"],
                 claims: claims,
-                expires: DateTime.UtcNow.AddMinutes(30), // Token expiration time
+                expires: DateTime.UtcNow.AddMinutes(30), // token expiration time
                 signingCredentials: new SigningCredentials(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["JwtSettings:SecretKey"])),
                     SecurityAlgorithms.HmacSha256)
             );
 
             return token;
+        }
+        public class RefreshRequest
+        {
+            public string RefreshToken { get; set; }
+            public string Email { get; set; }
         }
     }
 }
