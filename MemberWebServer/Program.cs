@@ -14,19 +14,28 @@ namespace MemberWebServer
 		public static void Main(string[] args)
 		{
 			var builder = WebApplication.CreateBuilder(args);
+            
 
-			var configuration = new ConfigurationBuilder()
+            var configuration = new ConfigurationBuilder()
 				.SetBasePath(builder.Environment.ContentRootPath)
 				.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
 				.Build();
 
 			builder.Services.AddControllers();
 			builder.Services.AddDbContext<LoginContext>(opt =>
-				opt.UseInMemoryDatabase("MemberList"));
+				opt.UseInMemoryDatabase("LoginList"));
 			builder.Services.AddDbContext<RegistrationContext>(opt =>
 				opt.UseInMemoryDatabase("RegistrationList"));
+            builder.Services.AddDbContext<MemberContext>(opt =>
+                opt.UseInMemoryDatabase("MemberList"));
 
-			builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+            builder.Services.AddAuthentication(
+				opt =>
+				{
+					opt.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+					opt.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+
+                })
 				.AddJwtBearer(options =>
 				{
 					options.TokenValidationParameters = new TokenValidationParameters
@@ -48,7 +57,30 @@ namespace MemberWebServer
 			builder.Services.AddEndpointsApiExplorer();
 			builder.Services.AddSwaggerGen(options =>
 			{
-				options.SwaggerDoc("v1", new OpenApiInfo
+                options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme()
+                {
+                    Name = "Authorization",
+                    In = ParameterLocation.Header,
+                    Type = SecuritySchemeType.Http,
+                    Scheme = "Bearer"
+                });
+
+				options.AddSecurityRequirement(new OpenApiSecurityRequirement
+				{
+					{
+						new OpenApiSecurityScheme
+						{
+							Reference = new OpenApiReference
+							{
+								Type = ReferenceType.SecurityScheme,
+								Id = "Bearer"
+							 }
+						},
+						Array.Empty< string >()
+					}
+				});
+
+                options.SwaggerDoc("v1", new OpenApiInfo
 				{
 					Version = "v1",
 					Title ="Member API"
@@ -70,12 +102,15 @@ namespace MemberWebServer
 
 			app.UseHttpsRedirection();
 
-			app.UseAuthorization();
+
+            app.UseAuthentication();
+            app.UseAuthorization();
 
 
 			app.MapControllers();
+            app.MapSwagger().RequireAuthorization();
 
-			app.Run();
+            app.Run();
 		}
 	}
 }

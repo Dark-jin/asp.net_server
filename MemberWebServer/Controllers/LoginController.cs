@@ -1,4 +1,6 @@
 ﻿using MemberWebServer.Model;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -6,6 +8,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.VisualStudio.Web.CodeGenerators.Mvc.Templates.BlazorIdentity.Pages;
 using Microsoft.VisualStudio.Web.CodeGenerators.Mvc.Templates.BlazorIdentity.Pages.Manage;
 using NuGet.Common;
+using System.Collections.Concurrent;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -15,39 +18,46 @@ using System.Text.RegularExpressions;
 
 namespace MemberWebServer.Controllers
 {
-	[Route("api/[controller]")]
-	[Produces("application/json")]
-	[ApiController]
-	public class LoginController : ControllerBase
-	{
-		private readonly LoginContext _context;
-		private readonly RegistrationContext _registrationContext;
+    [Route("api/[controller]")]
+    [Produces("application/json")]
+    [ApiController]
+    public class LoginController : ControllerBase
+    {
+        private readonly LoginContext _context;
+        private readonly RegistrationContext _registrationContext;
+        private readonly MemberContext _memberContext;
         private readonly IConfiguration _configuration;
+        private readonly ConcurrentDictionary<string, DateTime> _validTokens = new ConcurrentDictionary<string, DateTime>();
         public static List<string> RefreshTokens = new List<string>();
 
-        public LoginController(LoginContext context, RegistrationContext registrationContext, IConfiguration configuration)
-		{
-			_context = context;
+        public LoginController(LoginContext context, RegistrationContext registrationContext, IConfiguration configuration, MemberContext memberContext)
+        {
+            _context = context;
             _registrationContext = registrationContext;
-			_configuration = configuration;
-		}
-		// GET: api/<LoginController>
+            _configuration = configuration;
+            _memberContext = memberContext;
+        }
+        // GET: api/<LoginController>
         /// <summary>
         /// Email로 멤버 프로필 조회
         /// </summary>
         /// <param name="email"></param>
         /// <returns></returns>
-		[HttpGet("{email}")]
-		public async Task<ActionResult<Registration>> PostLogin(string email)
+        [HttpGet]
+		public async Task<ActionResult<MemberDB>> PostLogin([FromQuery] string email)
 		{
-			var registrationDB = await _registrationContext.Registrations.FindAsync(email);
+            var memberDB = await _memberContext.MemberDBs.FindAsync(email);
 
-			if (registrationDB == null)
+			if (memberDB == null)
 			{
 				return NotFound();
 			}
+            if(memberDB.accesstoken == null || memberDB.refreshtoken == null)
+            {
+                return BadRequest("로그인을 해주시길 바랍니다.");
+            }
 
-			return registrationDB;
+			return memberDB;
 		}
 		// POST api/<LoginController>
 		/// <remarks>
@@ -88,6 +98,22 @@ namespace MemberWebServer.Controllers
                     await _context.SaveChangesAsync();
 
 
+                    var member = new MemberDB
+                    {
+                        firstName = registrationDB.firstName,
+                        lastName = registrationDB.lastName,
+                        gender = registrationDB.gender,
+                        email = registrationDB.email,
+                        password = loginDB.password,
+                        userAvatar = registrationDB.userAvatar,
+                        accesstoken = new JwtSecurityTokenHandler().WriteToken(token),
+                        refreshtoken = refreshToken
+                    };
+                    _memberContext.MemberDBs.Add(member);
+                    await _memberContext.SaveChangesAsync();
+
+                    _validTokens[member.accesstoken] = token.ValidTo;
+
                     // accesstoken, refreshtoken provide from client
                     return Ok(new { AccessToken = new JwtSecurityTokenHandler().WriteToken(token), RefreshToken = refreshToken });
                 }
@@ -99,7 +125,6 @@ namespace MemberWebServer.Controllers
 
             // 로그인 시 메모리에 저장
 			return CreatedAtAction(nameof(PostLogin), new { id = loginDB.Id }, loginDB);
-            
         }
         // refreshtoken to accesstoken reprovide
         [HttpPost("refresh")]
@@ -116,6 +141,21 @@ namespace MemberWebServer.Controllers
             }
 
             return BadRequest("Invalid refresh token");
+        }
+        [Authorize]
+        [HttpPost("logout")]
+        public IActionResult Logout()
+        {
+            var token = Request.Headers["Authorization"].FirstOrDefault()?.Split(" ").Last();
+
+            if (token != null)
+            {
+                RevokeToken(token);
+                
+                return Ok(new { Message = "Logged out successfully" });
+            }
+
+            return BadRequest(new { Message = "Invalid token" });
         }
         private JwtSecurityToken GenerateAccessToken(string userEmail, string userName, string userAvatar)
         {
@@ -143,6 +183,10 @@ namespace MemberWebServer.Controllers
         {
             public string RefreshToken { get; set; }
             public string Email { get; set; }
+        }
+        private void RevokeToken(string token)
+        {
+            _validTokens.TryRemove(token, out _);
         }
     }
 }
