@@ -12,7 +12,7 @@ namespace MemberWebServer.Model
         public string? gender { get; set; }
         public string? password { get; set; }
         public string? userAvatar { get; set; }
-        public string accesstoken { get; set; }
-        public string refreshtoken { get; set; }
+        public string? accesstoken { get; set; }
+        public string? refreshtoken { get; set; }
     }
 }

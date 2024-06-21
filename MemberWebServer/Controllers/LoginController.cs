@@ -27,7 +27,6 @@ namespace MemberWebServer.Controllers
         private readonly RegistrationContext _registrationContext;
         private readonly MemberContext _memberContext;
         private readonly IConfiguration _configuration;
-        private readonly ConcurrentDictionary<string, DateTime> _validTokens = new ConcurrentDictionary<string, DateTime>();
         public static List<string> RefreshTokens = new List<string>();
 
         public LoginController(LoginContext context, RegistrationContext registrationContext, IConfiguration configuration, MemberContext memberContext)
@@ -65,7 +64,6 @@ namespace MemberWebServer.Controllers
 		///
 		///     POST /Login
 		///     {
-		///        "id": 0, - 자동으로 1씩 증가
 		///        "email" : test@test.com,
 		///        "password": test
 		///     }
@@ -81,6 +79,7 @@ namespace MemberWebServer.Controllers
 			{
                 var validationcheck =  await _registrationContext.Registrations.AnyAsync(user => user.email == loginDB.email && user.password == loginDB.password);
                 var registrationDB = await _registrationContext.Registrations.FindAsync(loginDB.email);
+                var memberDB = await _memberContext.MemberDBs.FindAsync(loginDB.email);
                 if (validationcheck == false)
 				{
                     return BadRequest("등록된 사용자가 없습니다.");
@@ -94,37 +93,41 @@ namespace MemberWebServer.Controllers
                     // Store the refresh token (in-memory for simplicity)
                     RefreshTokens.Add(refreshToken);
 
-                    _context.LoginDBs.Add(loginDB);
-                    await _context.SaveChangesAsync();
+                    var membercheck = await _memberContext.MemberDBs.FirstOrDefaultAsync(m => m.email == loginDB.email);
 
-
-                    var member = new MemberDB
+                    if (membercheck == null)
                     {
-                        firstName = registrationDB.firstName,
-                        lastName = registrationDB.lastName,
-                        gender = registrationDB.gender,
-                        email = registrationDB.email,
-                        password = loginDB.password,
-                        userAvatar = registrationDB.userAvatar,
-                        accesstoken = new JwtSecurityTokenHandler().WriteToken(token),
-                        refreshtoken = refreshToken
-                    };
-                    _memberContext.MemberDBs.Add(member);
-                    await _memberContext.SaveChangesAsync();
+                        var member = new MemberDB
+                        {
+                            firstName = registrationDB.firstName,
+                            lastName = registrationDB.lastName,
+                            gender = registrationDB.gender,
+                            email = registrationDB.email,
+                            password = loginDB.password,
+                            userAvatar = registrationDB.userAvatar,
+                            accesstoken = new JwtSecurityTokenHandler().WriteToken(token).ToString(),
+                            refreshtoken = refreshToken
+                        };
 
-                    _validTokens[member.accesstoken] = token.ValidTo;
+                        _memberContext.MemberDBs.Add(member);
+                        await _memberContext.SaveChangesAsync();
+                    }
+                    else
+                    {
+                        membercheck.accesstoken = new JwtSecurityTokenHandler().WriteToken(token).ToString();
+                        membercheck.refreshtoken = refreshToken;
+                        await _memberContext.SaveChangesAsync();
+                    }
 
                     // accesstoken, refreshtoken provide from client
                     return Ok(new { AccessToken = new JwtSecurityTokenHandler().WriteToken(token), RefreshToken = refreshToken });
                 }
+
             }
 			else
 			{
 				return BadRequest("이메일 형식에 맞추세요.");
 			}
-
-            // 로그인 시 메모리에 저장
-			return CreatedAtAction(nameof(PostLogin), new { id = loginDB.Id }, loginDB);
         }
         // refreshtoken to accesstoken reprovide
         [HttpPost("refresh")]
@@ -144,14 +147,20 @@ namespace MemberWebServer.Controllers
         }
         [Authorize]
         [HttpPost("logout")]
-        public IActionResult Logout()
+        public async Task<ActionResult<MemberDB>> Logout([FromQuery] string refresh)
         {
             var token = Request.Headers["Authorization"].FirstOrDefault()?.Split(" ").Last();
-
-            if (token != null)
+            var AccessToeken = _memberContext.MemberDBs.SingleOrDefault(r => r.accesstoken == token);
+            var RefreshToken = _memberContext.MemberDBs.SingleOrDefault(r => r.refreshtoken == refresh);
+           
+            if (token != null && AccessToeken != null && RefreshToken != null)
             {
-                RevokeToken(token);
                 
+                AccessToeken.accesstoken = null;
+                RefreshToken.refreshtoken = null;
+
+                await _memberContext.SaveChangesAsync();
+
                 return Ok(new { Message = "Logged out successfully" });
             }
 
@@ -183,10 +192,6 @@ namespace MemberWebServer.Controllers
         {
             public string RefreshToken { get; set; }
             public string Email { get; set; }
-        }
-        private void RevokeToken(string token)
-        {
-            _validTokens.TryRemove(token, out _);
         }
     }
 }
