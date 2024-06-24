@@ -87,7 +87,7 @@ namespace MemberWebServer.Controllers
                 }
 				else
 				{
-                    var token = GenerateAccessToken(loginDB.email, registrationDB.firstName + registrationDB.lastName, registrationDB.userAvatar);
+                    var token = GenerateAccessToken(loginDB.email, registrationDB.firstName + registrationDB.lastName);
                     // Generate refresh token
                     var refreshToken = Guid.NewGuid().ToString();
                     // Store the refresh token (in-memory for simplicity)
@@ -137,7 +137,7 @@ namespace MemberWebServer.Controllers
             {
                 var user = _registrationContext.Registrations.FirstOrDefault(r => r.email == request.Email);
                 // Generate a new access token
-                var token = GenerateAccessToken(user.email, user.firstName+user.lastName, user.userAvatar);
+                var token = GenerateAccessToken(user.email, user.firstName+user.lastName);
 
                 // Return the new access token to the client
                 return Ok(new { AccessToken = new JwtSecurityTokenHandler().WriteToken(token) });
@@ -166,14 +166,13 @@ namespace MemberWebServer.Controllers
 
             return BadRequest(new { Message = "Invalid token" });
         }
-        private JwtSecurityToken GenerateAccessToken(string userEmail, string userName, string userAvatar)
+        private JwtSecurityToken GenerateAccessToken(string userEmail, string userName)
         {
             // create user claim
             var claims = new List<Claim>
         {
             new Claim("email", userEmail),
-            new Claim("name", userName),
-            new Claim("userAvatar", userAvatar)
+            new Claim("name", userName)
         };
 
             // Create a JWT
