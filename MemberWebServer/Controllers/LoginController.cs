@@ -38,16 +38,18 @@ namespace MemberWebServer.Controllers
         }
         // GET: api/<LoginController>
         /// <summary>
-        /// Email로 멤버 프로필 조회
+        /// AccessToken으로 멤버 프로필 조회
         /// </summary>
-        /// <param name="email"></param>
         /// <returns></returns>
+        [Authorize]
         [HttpGet]
-		public async Task<ActionResult<MemberDB>> PostLogin([FromQuery] string email)
+		public async Task<ActionResult<MemberDB>> PostLogin()
 		{
-            var memberDB = await _memberContext.MemberDBs.FindAsync(email);
+            var token = Request.Headers["Authorization"].FirstOrDefault()?.Split(" ").Last();
 
-			if (memberDB == null)
+            var memberDB = await _memberContext.MemberDBs.SingleOrDefaultAsync(t=>t.accesstoken == token);
+
+            if (memberDB == null)
 			{
 				return NotFound();
 			}
