@@ -46,16 +46,11 @@ namespace MemberWebServer.Controllers
 		public async Task<ActionResult<MemberDB>> PostLogin()
 		{
             var token = Request.Headers["Authorization"].FirstOrDefault()?.Split(" ").Last();
-
             var memberDB = await _memberContext.MemberDBs.SingleOrDefaultAsync(t=>t.accesstoken == token);
 
             if (memberDB == null)
 			{
-				return NotFound();
-			}
-            if(memberDB.accesstoken == null || memberDB.refreshtoken == null)
-            {
-                return BadRequest("로그인을 해주시길 바랍니다.");
+				return BadRequest("유효하지 않는 토큰입니다.");
             }
 
 			return memberDB;

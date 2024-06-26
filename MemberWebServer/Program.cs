@@ -48,6 +48,20 @@ namespace MemberWebServer
 						ValidAudience = configuration["JwtSettings:Audience"],
 						IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["JwtSettings:SecretKey"]))
 					};
+					options.Events = new JwtBearerEvents
+					{
+						OnChallenge = context =>
+						{
+							context.HandleResponse();
+							context.Response.StatusCode = 401;
+							context.Response.ContentType = "application/json";
+							return context.Response.WriteAsync(new
+							{
+								context.Response.StatusCode,
+								Message = "로그인을 해주세요."
+							}.ToString());
+						}
+					};
 				});
 
 			// Add services to the container.
